@@ -32,55 +32,97 @@ if __name__ == '__main__':
     ################# DIRTY DATA FRAMES #####################
     #########################################################
 
+    def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+
+        # --- ID: normalize to pattern like "SKU-5"
+        df["id"] = df["id"].astype("string")
+
+        df["id"] = (
+            df["id"]
+            .str.strip()
+            .str.upper()
+            .str.replace(r"\s+", "", regex=True)  # remove all whitespace anywhere
+            .str.replace("_", "-", regex=False)  # underscores -> hyphens
+            .str.replace(r"-+", "-", regex=True)  # collapse multiple hyphens
+        )
+
+        # Add hyphen if someone wrote "SKU5" instead of "SKU-5"
+        df["id"] = df["id"].str.replace(r"^SKU(\d+)$", r"SKU-\1", regex=True)
+
+        # Optional: force IDs to match SKU-<digits>; non-matching -> <NA>
+        # df["id"] = df["id"].where(df["id"].str.match(r"^SKU-\d+$", na=False), pd.NA)
+
+        # --- PRICE: safe numeric conversion
+        df["price"] = pd.to_numeric(df["price"].astype("string").str.strip(), errors="coerce")
+
+        # --- NAME: normalize whitespace + title case
+        df["name"] = (
+            df["name"]
+            .astype("string")
+            .str.strip()
+            .str.replace(r"\s+", " ", regex=True)
+            .str.title()
+        )
+
+        # --- CURRENCY: strip + uppercase, keep missing as <NA>
+        df["currency"] = (
+            df["currency"]
+            .astype("string")
+            .str.strip()
+            .str.upper()
+        )
+
+        return df
+        
     dirty_df = pd.DataFrame(
         {
             "id": [" sku-1 ", "SKU- 2", "SKU-3", "sku_4", "SKU5"],
             "name": [" Shoes", "pants", "SHIRTS", " SweaTers ", "designer  jackets"],
-            "price": [" 299 ", "520", "600", "550 ", " 5400"],
+            "price": [" 299 ", "520.59", "600", "550 ", " 5400"],
             "currency": [" sek", "SEK", "SeK", "sek ", "SEK"],  # TODO - Missing values for CSV files when loaded (Crash)
         }
     )
 
-    ## dirty_df.id = [cleaned strings] <--- FALSE
-    # dirty_df["id"].strip() # This won't properly replace values in Series (columns)
-    dirty_df["id"] = dirty_df["id"].str.strip() # Remove Whitespaces (start/end of string)
-    dirty_df["id"] = dirty_df["id"].str.upper() # ALL CAPS
-    dirty_df["id"] = dirty_df["id"].str.replace(" ", "").str.replace("_", "-") # Replace string content
+    cleaned_df = clean_dataframe(dirty_df)
 
-    ## EDGE CASES ##
-    # SKU5 <-- which EXCLUDES '-', Danger zone, because transformation isn't adding symbols...
-    # SKU_4 <-- Technical Danger zone, what if multiple -- exists?
+    
 
-    dirty_df["price"] = dirty_df["price"].astype(float) # Casts: Current-Datatype -> float
-
-    dirty_df["name"] = dirty_df["name"].str.strip()
-    dirty_df["name"] = dirty_df["name"].str.title()
-    dirty_df["name"] = dirty_df["name"].str.replace(r"\s+", " ", regex = True) # regex, value, bool
-
-    dirty_df["currency"] = dirty_df["currency"].str.strip().str.upper()
-
-    print(dirty_df.values)
+    print(cleaned_df.values)
 
     #########################################################
     ################# MISSING DATA FRAMES ###################
     #########################################################
+
+    def flag_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        df["status"] = ""
+
+        if df["id"].isna().any():
+            df.loc[df["id"].isna(), "status"] += "Missing ID; "
+        if df["name"].isna().any():
+            df.loc[df["name"].isna(), "status"] += "Missing Name; "
+        if df["price"].isna().any():
+            df.loc[df["price"].isna(), "status"] += "Missing Price; "
+        if df["currency"].isna().any():
+            df.loc[df["currency"].isna(), "status"] += "Missing Currency; "
+
+        df.loc[df["status"] == "", "status"] = "ACCEPTED"
+        return df
 
     missing_df = pd.DataFrame(
         {
             "id": [" sku-1 ", "SKU- 2", None, "sku_4", "SKU5 "],
             "name": [" Shoes", None, "SHIRTS", " SweaTers ", "designer  jacket"],
             "price": [" 760 ", "520", None, "550 ", " 4500"],
-            "currency": [" sek", "SEK ", "Sek", None, " SEK"],
+            "currency": [" sek", "SEK ", None, None, " SEK"],
         }
     )
 
     print(missing_df.isna()) # Pandas tool for identifying TRUE missing values
 
-    # TODO - helper method for quick assigning multiple columns
-    # Flag missing values, helps decide strategy later on
-    missing_df["id_missing"] = missing_df["id"].isna()
-    missing_df["name_missing"] = missing_df["name"].isna()
-    missing_df["price_missing"] = missing_df["price"].isna()
-    missing_df["currency_missing"] = missing_df["currency"].isna()
+    cleaned_df2 = clean_dataframe(missing_df)
+    flagged_df = flag_dataframe(cleaned_df2)
 
-    print(missing_df)
+    print(flagged_df)
+    print(cleaned_df2)
