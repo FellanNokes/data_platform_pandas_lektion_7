@@ -126,3 +126,6 @@ if __name__ == '__main__':
 
     print(flagged_df)
     print(cleaned_df2)
+
+    products_raw = pd.read_csv("products_raw.csv")
+    print(products_raw)
